@@ -12,7 +12,7 @@ from warnings import warn
 
 from necessary import necessary
 
-with necessary("presidio-analyzer", soft=True) as PRESIDIO_AVAILABLE:
+with necessary("presidio_analyzer", soft=True) as PRESIDIO_AVAILABLE:
     if PRESIDIO_AVAILABLE:
         from presidio_analyzer import AnalyzerEngine  # pylint: disable=import-error # pyright: ignore
 

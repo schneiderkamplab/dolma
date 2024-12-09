@@ -112,6 +112,7 @@ class Cld2LanguageTagger(BaseLanguageTagger):
     def predict_text(self, text: str) -> List[Tuple[str, float]]:
         details = []
         is_reliable = False
+        text = text.replace('\x00', '')
         for fn in (self._identity_fn, self._to_ascii_input, self._sanitize_input):
             try:
                 is_reliable, _, details = cld2.detect(fn(text))
