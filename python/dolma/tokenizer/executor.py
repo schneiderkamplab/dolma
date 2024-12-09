@@ -52,6 +52,8 @@ class MemMapParallelWriter(BaseParallelProcessor):
         local_shuffle: int = kwargs.pop("local_shuffle", None) or 10_000
         ring_size: int = kwargs.pop("ring_size", None) or 8
         sample_ring_prop: bool = kwargs.pop("sample_ring_prop", None) or False
+        sample_probs: List[float] = kwargs.pop("sample_probs", None)
+        sample_probs = [x / sum(sample_probs) for x in sample_probs] if sample_probs is not None else None
 
         global_source_paths = kwargs.pop("grouped_source_prefixes", None)
         if not isinstance(global_source_paths, list):
@@ -99,6 +101,7 @@ class MemMapParallelWriter(BaseParallelProcessor):
 
         tokenizer_ring: List[Generator[TokenizerOutput, None, None]] = []
         tokenizer_sizes: List[int] = []
+        tokenizer_probs: Optional[List[float]] = None if sample_probs is None else []
         for _ in range(min(ring_size, len(source_paths))):
             path = source_paths.pop()
             tokenizer_ring.append(
@@ -110,9 +113,11 @@ class MemMapParallelWriter(BaseParallelProcessor):
                 )
             )
             tokenizer_sizes.append(get_size(path))
+            if sample_probs is not None:
+                tokenizer_probs.append(sample_probs.pop())
 
         # this is the probabilities with which we sample from the ring buffer if sample_ring_prop is True
-        tokenizer_probs = sizes_to_probs(tokenizer_sizes)
+        tokenizer_probs = sizes_to_probs(tokenizer_sizes) if sample_probs is None else tokenizer_probs
 
         accumulator = []
 
@@ -161,9 +166,11 @@ class MemMapParallelWriter(BaseParallelProcessor):
                                 )
                             )
                             tokenizer_sizes.append(get_size(path))
+                            if sample_probs is not None:
+                                tokenizer_probs.append(sample_probs.pop())
 
                         # wether a file is added or not to the ring, we must re-balance probabilities
-                        tokenizer_probs = sizes_to_probs(tokenizer_sizes)
+                        tokenizer_probs = sizes_to_probs(tokenizer_sizes, sample_probs) if sample_probs is None else tokenizer_probs
 
                     # check if it time to update the progress bar!
                     if documents_cnt >= update_interval:
@@ -207,7 +214,15 @@ class MemMapParallelWriter(BaseParallelProcessor):
 
         # get all source paths; shuffle them well
         all_source_paths = [p for source in self.src_prefixes for p in glob_path(source)]
-        random.shuffle(all_source_paths)
+        shuffle_sources: bool = process_single_kwargs.pop("shuffle_sources", None)
+        sample_probs: List[float] = process_single_kwargs.pop("sample_probs", None)
+        if shuffle_sources:
+            if sample_probs is None:
+                random.shuffle(all_source_paths)
+            else:
+                temp = list(zip(all_source_paths, sample_probs))
+                random.shuffle(temp)
+                all_source_paths, sample_probs = zip(*temp)
 
         # TRICKY BIT: Group source paths into buckets
         # First, check what the step size should be. The step is the minimum between the
@@ -303,6 +318,8 @@ def tokenize_in_parallel(
     dtype: str = "uint16",
     debug: bool = False,
     sample_ring_prop: bool = False,
+    shuffle_sources: bool = True,
+    sample_probs: Optional[List[float]] = None,
     refresh_tokenizer: int = 0,
     use_fast_tokenizer: bool = True,
 ):
@@ -378,6 +395,8 @@ def tokenize_in_parallel(
         encode_special_tokens=encode_special_tokens,
         tokenizer_name_or_path=tokenizer_name_or_path,
         sample_ring_prop=sample_ring_prop,
+        shuffle_sources=shuffle_sources,
+        sample_probs=sample_probs,
         use_fast_tokenizer=use_fast_tokenizer,
         refresh_tokenizer=refresh_tokenizer,
     )

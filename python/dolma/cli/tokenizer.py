@@ -43,7 +43,7 @@ class TokenizerConfig:
         ),
     )
     fast: bool = field(
-        default=True,
+        default=False,
         help="Whether to use the fast tokenizer. If False, it requires the transformers library to be installed.",
     )
     encode_special_tokens: bool = field(
@@ -135,6 +135,14 @@ class TokenizationConfig:
         default=False,
         help="Whether to sample the ring proportionally to the number of documents in each source.",
     )
+    shuffle_sources: bool = field(
+        default=True,
+        help="Whether to shuffle the order of sources before processing.",
+    )
+    sample_probs: List[float] = field(
+        default=None,
+        help="Probabilities for sampling each source.",
+    )
     max_size: int = field(
         default=1024 * 1024 * 1024,
         help="Maximum size of a file in bytes.",
@@ -219,6 +227,8 @@ class TokenizerCli(BaseCli):
                 max_size=parsed_config.max_size,
                 debug=parsed_config.debug,
                 sample_ring_prop=parsed_config.sample_ring_prop,
+                shuffle_sources=parsed_config.shuffle_sources,
+                sample_probs=parsed_config.sample_probs,
                 use_fast_tokenizer=parsed_config.tokenizer.fast,
                 refresh_tokenizer=parsed_config.tokenizer.refresh,
             )
