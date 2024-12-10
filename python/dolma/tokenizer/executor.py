@@ -214,8 +214,6 @@ class MemMapParallelWriter(BaseParallelProcessor):
         all_source_paths = [p for source in self.src_prefixes for p in glob_path(source)]
         shuffle_sources: bool = process_single_kwargs.pop("shuffle_sources", None)
         sample_probs: List[float] = process_single_kwargs.pop("sample_probs", None) or []
-        print(f"sample_probs = {sample_probs}")
-        print(f"all_source_paths = {all_source_paths}")
         if shuffle_sources:
             if not sample_probs:
                 random.shuffle(all_source_paths)
@@ -223,6 +221,7 @@ class MemMapParallelWriter(BaseParallelProcessor):
                 temp = list(zip(all_source_paths, sample_probs))
                 random.shuffle(temp)
                 all_source_paths, sample_probs = zip(*temp)
+                process_single_kwargs["sample_probs"] = sample_probs
 
         # TRICKY BIT: Group source paths into buckets
         # First, check what the step size should be. The step is the minimum between the
