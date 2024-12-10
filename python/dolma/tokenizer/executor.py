@@ -114,7 +114,8 @@ class MemMapParallelWriter(BaseParallelProcessor):
                     **tokenizer_kwargs,
                 )
             )
-            tokenizer_probs.append(sample_probs.pop())
+            if do_sample:
+                tokenizer_probs.append(sample_probs.pop())
 
         # this is the probabilities with which we sample from the ring buffer if sample_ring_prop is True or sample_probs is not empty
         tokenizer_probs = normalize(tokenizer_probs)
@@ -165,7 +166,8 @@ class MemMapParallelWriter(BaseParallelProcessor):
                                     **tokenizer_kwargs,
                                 )
                             )
-                            tokenizer_probs.append(get_size(path))
+                            if do_sample:
+                                tokenizer_probs.append(sample_probs.pop())
 
                         # wether a file is added or not to the ring, we must re-balance probabilities
                         tokenizer_probs = normalize(tokenizer_probs)
