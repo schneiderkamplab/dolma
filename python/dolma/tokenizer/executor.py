@@ -213,9 +213,11 @@ class MemMapParallelWriter(BaseParallelProcessor):
         # get all source paths; shuffle them well
         all_source_paths = [p for source in self.src_prefixes for p in glob_path(source)]
         shuffle_sources: bool = process_single_kwargs.pop("shuffle_sources", None)
-        sample_probs: List[float] = process_single_kwargs.pop("sample_probs", None)
+        sample_probs: List[float] = process_single_kwargs.pop("sample_probs", None) or []
+        print(f"sample_probs = {sample_probs}")
+        print(f"all_source_paths = {all_source_paths}")
         if shuffle_sources:
-            if sample_probs is None:
+            if not sample_probs:
                 random.shuffle(all_source_paths)
             else:
                 temp = list(zip(all_source_paths, sample_probs))
