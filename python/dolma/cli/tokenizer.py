@@ -140,7 +140,7 @@ class TokenizationConfig:
         help="Whether to shuffle the order of sources before processing.",
     )
     sample_probs: List[float] = field(
-        default=None,
+        default=[],
         help="Probabilities for sampling each source.",
     )
     max_size: int = field(

@@ -22,8 +22,8 @@ TokenizedSeqsQueueType: TypeAlias = "Queue[List[TokenizerOutput]]"
 PathsQueueType: TypeAlias = "Queue[str]"
 
 
-def sizes_to_probs(sizes: List[int]) -> np.ndarray:
-    return np.array(sizes) / sum(sizes)
+def normalize(probs: List[float]) -> np.ndarray:
+    return np.array(probs) / sum(probs)
 
 
 class MemMapParallelWriter(BaseParallelProcessor):
@@ -52,8 +52,7 @@ class MemMapParallelWriter(BaseParallelProcessor):
         local_shuffle: int = kwargs.pop("local_shuffle", None) or 10_000
         ring_size: int = kwargs.pop("ring_size", None) or 8
         sample_ring_prop: bool = kwargs.pop("sample_ring_prop", None) or False
-        sample_probs: List[float] = kwargs.pop("sample_probs", None)
-        sample_probs = [x / sum(sample_probs) for x in sample_probs] if sample_probs is not None else None
+        sample_probs: List[float] = kwargs.pop("sample_probs", None) or []
 
         global_source_paths = kwargs.pop("grouped_source_prefixes", None)
         if not isinstance(global_source_paths, list):
@@ -61,6 +60,10 @@ class MemMapParallelWriter(BaseParallelProcessor):
         elif len(global_source_paths) == 0:
             raise RuntimeError("grouped_source_prefixes should not be empty")
         source_paths = global_source_paths[int(source_path)]
+
+        if sample_ring_prop:
+            sample_probs = [get_size(path) for path in source_paths]
+        do_sample: bool = len(sample_probs) > 0
 
         tokenizer_name_or_path = kwargs.pop("tokenizer_name_or_path", None)
         if tokenizer_name_or_path is None:
@@ -100,8 +103,7 @@ class MemMapParallelWriter(BaseParallelProcessor):
         mm_cnt = 0
 
         tokenizer_ring: List[Generator[TokenizerOutput, None, None]] = []
-        tokenizer_sizes: List[int] = []
-        tokenizer_probs: Optional[List[float]] = None if sample_probs is None else []
+        tokenizer_probs: List[float] = []
         for _ in range(min(ring_size, len(source_paths))):
             path = source_paths.pop()
             tokenizer_ring.append(
@@ -112,12 +114,10 @@ class MemMapParallelWriter(BaseParallelProcessor):
                     **tokenizer_kwargs,
                 )
             )
-            tokenizer_sizes.append(get_size(path))
-            if sample_probs is not None:
-                tokenizer_probs.append(sample_probs.pop())
+            tokenizer_probs.append(sample_probs.pop())
 
-        # this is the probabilities with which we sample from the ring buffer if sample_ring_prop is True
-        tokenizer_probs = sizes_to_probs(tokenizer_sizes) if sample_probs is None else tokenizer_probs
+        # this is the probabilities with which we sample from the ring buffer if sample_ring_prop is True or sample_probs is not empty
+        tokenizer_probs = normalize(tokenizer_probs)
 
         accumulator = []
 
@@ -129,7 +129,7 @@ class MemMapParallelWriter(BaseParallelProcessor):
 
             while len(source_paths) > 0 or len(tokenizer_ring) > 0:
                 for i in range(local_shuffle):
-                    if sample_ring_prop:
+                    if do_sample:
                         # you are sampling proportionally to the size of files in the ring
                         j = np.random.choice(len(tokenizer_ring), p=tokenizer_probs)
                     else:
@@ -150,7 +150,7 @@ class MemMapParallelWriter(BaseParallelProcessor):
                         # we have reached the end of one of the file; move to the next!
                         cls.increment_progressbar(queue, files=1)
                         tokenizer_ring.pop(j)
-                        tokenizer_sizes.pop(j)
+                        tokenizer_probs.pop(j)
 
                         if len(tokenizer_ring) == 0:
                             # break if no more files to tokenize
@@ -165,12 +165,10 @@ class MemMapParallelWriter(BaseParallelProcessor):
                                     **tokenizer_kwargs,
                                 )
                             )
-                            tokenizer_sizes.append(get_size(path))
-                            if sample_probs is not None:
-                                tokenizer_probs.append(sample_probs.pop())
+                            tokenizer_probs.append(get_size(path))
 
                         # wether a file is added or not to the ring, we must re-balance probabilities
-                        tokenizer_probs = sizes_to_probs(tokenizer_sizes, sample_probs) if sample_probs is None else tokenizer_probs
+                        tokenizer_probs = normalize(tokenizer_probs)
 
                     # check if it time to update the progress bar!
                     if documents_cnt >= update_interval:
