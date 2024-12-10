@@ -22,8 +22,8 @@ TokenizedSeqsQueueType: TypeAlias = "Queue[List[TokenizerOutput]]"
 PathsQueueType: TypeAlias = "Queue[str]"
 
 
-def normalize(probs: List[float]) -> np.ndarray:
-    return np.array(probs) / sum(probs)
+def normalize(probs: List[float]) -> List[float]:
+    return list(np.array(probs) / sum(probs))
 
 
 class MemMapParallelWriter(BaseParallelProcessor):
